@@ -16,6 +16,62 @@ let gameSessions = {};
 let playersMap = {}; // Store players globally by playerId
 const 
 LARAVEL_API_BASE_URL = "https://avmlite.com/api"; // Replace with your Laravel API base URL
+const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
+const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'jack', 'queen', 'king', 'ace'];
+
+// Function to generate a deck of 52 cards
+function generateDeck() {
+  const deck = [];
+  for (const suit of suits) {
+    for (const value of values) {
+      deck.push({ value, suit });
+    }
+  }
+  return deck;
+}
+
+// Shuffle the deck
+function shuffleDeck(deck) {
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]]; // Swap elements
+  }
+  return deck;
+}
+
+// Function to generate a winning hand (e.g., a flush)
+function generateWinningHand() {
+    const handType = Math.random() > 0.5 ? "three_of_a_kind" : "sequence"; // Randomly pick hand type
+  
+    if (handType === "three_of_a_kind") {
+      // Generate three of a kind with different suits
+      const value = values[Math.floor(Math.random() * values.length)];
+      const shuffledSuits = shuffleDeck(suits.slice()); // Shuffle suits for randomness
+  
+      return [
+        { value, suit: shuffledSuits[0] },
+        { value, suit: shuffledSuits[1] },
+        { value, suit: shuffledSuits[2] },
+      ];
+    } else {
+      // Generate a sequence (straight) with different suits
+      const startIndex = Math.floor(Math.random() * (values.length - 2));
+      const sequence = values.slice(startIndex, startIndex + 3);
+  
+      const shuffledSuits = shuffleDeck(suits.slice()); // Shuffle suits for randomness
+  
+      return sequence.map((value, index) => ({
+        value,
+        suit: shuffledSuits[index % suits.length], // Rotate through suits
+      }));
+    }
+  }
+// Function to generate a losing hand (just random cards)
+function generateLosingHand() {
+  const deck = generateDeck();
+  const shuffledDeck = shuffleDeck(deck);
+  return shuffledDeck.slice(0, 3); // Pick first 3 cards after shuffle
+}
 
 // Function to broadcast the current player statuses to all clients
 function broadcastPlayerStatuses() {
@@ -42,7 +98,6 @@ async function startNewGame() {
         "name": "Teen Patti",
         "description": "A thrilling card game."
     });
-    console.log(response);
     const { game_id: gameId, status } = response.data;
 
     if (!gameId || status !== "success") {
@@ -80,7 +135,7 @@ async function endGame() {
   if (!currentGame) return;
 
   const gameId = currentGame.gameId;
-  const winners = determineWinners(currentGame); // Updated logic to find winners
+  const { winners, winningPot } = determineWinners(currentGame); // Updated logic to find winners and the winning pot
 
   gameSessions[gameId] = { ...currentGame, winners, endTime: Date.now() };
 
@@ -98,12 +153,28 @@ async function endGame() {
   } catch (error) {
     console.error(`Failed to store winners for game ${gameId}:`, error.response?.data?.message || error.message);
   }
-
+  const winningHand = generateWinningHand().map(
+    (card) => `${card.value}_of_${card.suit}.png`
+  );
+  const losingHand1 = generateLosingHand().map(
+    (card) => `${card.value}_of_${card.suit}.png`
+  );
+  const losingHand2 = generateLosingHand().map(
+    (card) => `${card.value}_of_${card.suit}.png`
+  );
+  console.log("Game ended! Cards:");
+  console.log("Winning Hand:", winningHand);
+  console.log("Losing Hand 1:", losingHand1);
+  console.log("Losing Hand 2:", losingHand2);
   // Notify all players about the game result
   io.emit("game_ended", {
     gameId,
     winners,
     placedBets: currentGame.bets,
+    winningPot,
+    winningHand,
+    losingHand1,
+    losingHand2
   });
 
   console.log(
@@ -130,11 +201,19 @@ async function endGame() {
       players: currentGame.players,
       bets: currentGame.bets,
     });
-  }, 5000); // 5 seconds delay before starting the new game
+  }, 10000); // 5 seconds delay before starting the new game
 }
 
 function determineWinners(game) {
-    if (game.bets.length === 0) return []; // No bets, no winners
+    if (game.bets.length === 0) {
+        console.log("No bets placed, returning random pot.");
+        
+        // Choose a random pot ('A', 'B', or 'C')
+        const randomPot = ['A', 'B', 'C'][Math.floor(Math.random() * 3)];
+        console.log("Random pot:", randomPot);
+        
+        return { winners: [], winningPot: randomPot }; // No winners, but return a random pot
+      }
   
     // Calculate the total bet amount for each pot
     const potTotals = game.bets.reduce(
@@ -165,7 +244,7 @@ function determineWinners(game) {
         betPot: bet.betPot,
       }));
   
-    return winners;
+      return { winners, winningPot: minPot };
   }
   
 
