@@ -18,7 +18,29 @@ const
 LARAVEL_API_BASE_URL = "https://avmlite.com/api"; // Replace with your Laravel API base URL
 const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
 const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'jack', 'queen', 'king', 'ace'];
+const betValues = ["50", "200", "500", "1000", "5000"];
+const betImages = [
+  'assets/gems_1.png', 'assets/gems_2.png', 'assets/gems_3.png', 
+  'assets/gems_4.png', 'assets/gems_5.png'
+];
+const betPots = ['A', 'B', 'C']; // Randomly pick from these pots
 
+// Function to generate a fake bet
+function generateFakeBet() {
+  const betValueIndex = Math.floor(Math.random() * betValues.length);
+  const betPot = betPots[Math.floor(Math.random() * betPots.length)];
+  const betAmount = betValues[betValueIndex];
+  const betImage = betImages[betValueIndex];
+  console.log(`Generating fake bet: ${betAmount} on pot ${betPot}`); 
+  // Return the fake bet with playerId: 1
+  return {
+    playerId: 1,  // Hardcoded playerId as 1
+    amount: parseFloat(betAmount),
+    betPot: betPot,
+    image: betImage,
+    
+  };
+}
 // Function to generate a deck of 52 cards
 function generateDeck() {
   const deck = [];
@@ -109,6 +131,7 @@ async function startNewGame() {
       gameId,
       players: [], // This will be repopulated from playersMap
       bets: [],
+      fakeBet:[],
       startTime: Date.now(),
       timer: null,
     };
@@ -123,7 +146,25 @@ async function startNewGame() {
     currentGame.timer = setTimeout(() => {
       endGame();
     }, GAME_DURATION);
-
+    const fakeBetInterval = setInterval(() => {
+        if (Date.now() >= currentGame.startTime + GAME_DURATION - 5000) {
+          // Stop generating fake bets 5 seconds before game ends
+          clearInterval(fakeBetInterval);
+        } else {
+          // Emit a fake bet every 2 seconds
+          const fakeBet = generateFakeBet();
+          currentGame.fakeBet.push({ playerId:fakeBet.playerId, amount: fakeBet.amount, betPot:fakeBet.betPot ,image: fakeBet.image });
+          io.emit("fake_bets", {
+            playerId: fakeBet.playerId,
+            amount: fakeBet.amount,
+            betPot: fakeBet.betPot,
+            image: fakeBet.image,
+            gameId: currentGame.gameId,
+          });
+          console.log(`Fake bet placed: ${fakeBet.amount} on ${fakeBet.betPot}`);
+        }
+      }, 1500); // Generate fake bets every 2 seconds
+  
     return currentGame;
   } catch (error) {
     console.error("Error while creating game:", error.message);
@@ -170,7 +211,7 @@ async function endGame() {
   io.emit("game_ended", {
     gameId,
     winners,
-    placedBets: currentGame.bets,
+    placedBets: currentGame.bets ?? [],
     winningPot,
     winningHand,
     losingHand1,
@@ -200,6 +241,7 @@ async function endGame() {
       timeRemaining: GAME_DURATION, // Reset to full duration for the new game
       players: currentGame.players,
       bets: currentGame.bets,
+      fakeBet:currentGame.fakeBet
     });
   }, 10000); // 5 seconds delay before starting the new game
 }
@@ -238,8 +280,8 @@ function determineWinners(game) {
       .filter((bet) => bet.betPot === minPot)
       .map((bet) => ({
         userId: bet.playerId,
-        userName: bet.name,
-        userProfile: bet.profile,
+        userName: playersMap[bet.playerId]?.name,
+        userProfile: playersMap[bet.playerId]?.profile,
         amount: bet.amount,
         betPot: bet.betPot,
       }));
@@ -290,12 +332,13 @@ io.on("connection", (socket) => {
       timeRemaining: timeRemaining > 0 ? timeRemaining : GAME_DURATION, // Full duration if the game just started
       players: currentGame.players,
       bets: currentGame.bets,
+      fakeBet:currentGame.fakeBet,
     });
 
     console.log(`Player ${playerId} joined game ${currentGame.gameId}`);
   });
 
-  socket.on("place_bet", ({ playerId, amount, betPot, image, tapPosition }) => {
+  socket.on("place_bet", ({ playerId, amount, betPot, image }) => {
     if (!currentGame) {
       socket.emit("error", { message: "No ongoing game." });
       return;
