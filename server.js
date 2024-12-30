@@ -198,8 +198,8 @@ async function startNewGame() {
       currentGame.players.push(playersMap[playerId]);
     }
 
-    const count = Math.floor(Math.random() * 6) + 5;
-    currentGame.fakeplayers = generateRandomFakePlayers(count);
+    //const count = Math.floor(Math.random() * 6) + 5;
+    //currentGame.fakeplayers = generateRandomFakePlayers(count);
 
     console.log(`Game ${gameId} started!`);
 
@@ -208,28 +208,28 @@ async function startNewGame() {
       endGame();
     }, GAME_DURATION);
 
-    // Start generating fake bets every 1.5s, stop 5s before end
-    const fakeBetInterval = setInterval(() => {
-      if (Date.now() >= currentGame.startTime + GAME_DURATION - 5000) {
-        clearInterval(fakeBetInterval);
-      } else {
-        const fakeBet = generateFakeBet();
-        currentGame.fakeBet.push({
-          playerId: fakeBet.playerId,
-          amount: fakeBet.amount,
-          betPot: fakeBet.betPot,
-          image: fakeBet.image,
-        });
-        io.emit("fake_bets", {
-          playerId: fakeBet.playerId,
-          amount: fakeBet.amount,
-          betPot: fakeBet.betPot,
-          image: fakeBet.image,
-          gameId: currentGame.gameId,
-        });
-        console.log(`Fake bet placed: ${fakeBet.amount} on ${fakeBet.betPot}`);
-      }
-    }, 1500);
+    // // Start generating fake bets every 1.5s, stop 5s before end
+    // const fakeBetInterval = setInterval(() => {
+    //   if (Date.now() >= currentGame.startTime + GAME_DURATION - 5000) {
+    //     clearInterval(fakeBetInterval);
+    //   } else {
+    //     const fakeBet = generateFakeBet();
+    //     currentGame.fakeBet.push({
+    //       playerId: fakeBet.playerId,
+    //       amount: fakeBet.amount,
+    //       betPot: fakeBet.betPot,
+    //       image: fakeBet.image,
+    //     });
+    //     io.emit("fake_bets", {
+    //       playerId: fakeBet.playerId,
+    //       amount: fakeBet.amount,
+    //       betPot: fakeBet.betPot,
+    //       image: fakeBet.image,
+    //       gameId: currentGame.gameId,
+    //     });
+    //     console.log(`Fake bet placed: ${fakeBet.amount} on ${fakeBet.betPot}`);
+    //   }
+    // }, 1500);
 
     return currentGame;
   } catch (error) {
@@ -362,22 +362,24 @@ function determineWinners(game) {
   }
 
   // Calculate the total bet amount for each pot
-  const potTotals = game.bets.reduce(
-    (totals, bet) => {
-      if (!totals[bet.betPot]) totals[bet.betPot] = 0;
-      totals[bet.betPot] += bet.amount;
-      return totals;
-    },
-    { A: 0, B: 0, C: 0 }
-  );
+//   const potTotals = game.bets.reduce(
+//     (totals, bet) => {
+//       if (!totals[bet.betPot]) totals[bet.betPot] = 0;
+//       totals[bet.betPot] += bet.amount;
+//       return totals;
+//     },
+//     { A: 0, B: 0, C: 0 }
+//   );
 
-  // Find the pot with the minimum total amount
-  const minPot = Object.keys(potTotals).reduce((minPot, pot) => {
-    if (potTotals[pot] < potTotals[minPot]) return pot;
-    return minPot;
-  }, "A");
-
-  console.log(`Minimum pot is ${minPot} with total: ${potTotals[minPot]}`);
+//   // Find the pot with the minimum total amount
+//   const minPot = Object.keys(potTotals).reduce((minPot, pot) => {
+//     if (potTotals[pot] < potTotals[minPot]) return pot;
+//     return minPot;
+//   }, "A");
+const minPot = ["A", "B", "C"][
+    Math.floor(Math.random() * 3)
+  ];
+ // console.log(`Minimum pot is ${minPot} with total: ${potTotals[minPot]}`);
 
   // Get all players who placed bets in the minimum pot
   const winners = game.bets
