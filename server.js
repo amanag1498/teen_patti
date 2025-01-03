@@ -251,7 +251,7 @@ async function endGame() {
   if (!currentGame) return;
 
   const gameId = currentGame.gameId;
-  const { winners, winningPot } = determineWinners(currentGame);
+  const { winners, winningPot } = await determineWinners(currentGame);
 
   // Keep a record of this game
   gameSessions[gameId] = {
@@ -269,6 +269,7 @@ async function endGame() {
         winners: winners.map((winner) => ({
           user_id: winner.userId,
           amount: winner.amount,
+          pot:winningPot,
         })),
       }
     );
@@ -349,7 +350,7 @@ async function endGame() {
  * - If no bets, pick a random pot & no winners
  * - Otherwise, find pot with the MINIMUM total bet (that pot is winner)
  */
-function determineWinners(game) {
+async function determineWinners(game) {
   if (!game.bets || game.bets.length === 0) {
     console.log("No bets placed, returning random pot.");
 
@@ -376,10 +377,31 @@ function determineWinners(game) {
 //     if (potTotals[pot] < potTotals[minPot]) return pot;
 //     return minPot;
 //   }, "A");
-const minPot = ["A", "B", "C"][
-    Math.floor(Math.random() * 3)
-  ];
- // console.log(`Minimum pot is ${minPot} with total: ${potTotals[minPot]}`);
+
+let minPot;
+
+  // Try fetching the winning pot from the API
+  try {
+    const response = await axios.get(`${LARAVEL_API_BASE_URL}/winning-pot`);
+    const { data: apiWinningPot, success } = response.data;
+
+    if (success && ["A", "B", "C"].includes(apiWinningPot)) {
+      minPot = apiWinningPot;
+      console.log(`API returned winning pot: ${minPot}`);
+    } else {
+      console.log("Invalid response from API. Falling back to random pot.");
+    }
+  } catch (error) {
+    console.error("Error fetching winning pot from API:", error);
+  }
+
+  // If API fails or is invalid, fallback to a random pot
+  if (!minPot) {
+    minPot = ["A", "B", "C"][
+      Math.floor(Math.random() * 3)
+    ];
+    console.log("Fallback to random pot:", minPot);
+  }
 
   // Get all players who placed bets in the minimum pot
   const winners = game.bets
@@ -402,12 +424,15 @@ io.on("connection", (socket) => {
   // Listen for player joining the game
   socket.on("join_game", async ({ playerId, playerName, playerProfile }) => {
     // Store player info in the global players map
-    playersMap[playerId] = {
-      playerId,
-      name: playerName,
-      profile: playerProfile,
-      socketId: socket.id,
-    };
+    if(playerId !== 519){
+      playersMap[playerId] = {
+        playerId,
+        name: playerName,
+        profile: playerProfile,
+        socketId: socket.id,
+      };
+    }
+  
 
     // If no active game, attempt to start one (once)
     if (!currentGame) {
@@ -420,7 +445,7 @@ io.on("connection", (socket) => {
     }
 
     // If the player isn't already in the currentGame, add them
-    if (!currentGame.players.some((p) => p.playerId === playerId)) {
+    if (!currentGame.players.some((p) => p.playerId === playerId) || playerId !== 519) {
       currentGame.players.push({
         playerId,
         name: playerName,
